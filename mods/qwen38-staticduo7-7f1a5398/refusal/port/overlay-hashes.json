@@ -1,0 +1,38 @@
+{
+  "models/qwen4_exp/nvidia/model.py": {
+    "before": "bdc0ea930dadc02328c2bee0b4c9cad048b989612cc76906829728668dcde138",
+    "after": "b36c9175d539abbee4da5c8827ec888179ed6ee8dbb43b99fdc42c252fc3a439"
+  },
+  "models/qwen4_exp/nvidia/mtp.py": {
+    "before": "35dc7e4b4cf124ce79a7bfc65a5f198c9edc622f1692bf6b24c91486112b7d99",
+    "after": "1a1cd94fb44e3ef6a6ae44103b12a1891ba7aedecc4f1d983ac090cafb27eaa6"
+  },
+  "models/qwen4_exp/nvidia/ple_layer.py": {
+    "before": "704849dca1a5abaca978dd366e23f27ed327f2ee517a6589f1dfb03602782967",
+    "after": "0fcc9b61a2340f59a39ac41f31da79b7c00f1593fa05a2eb8bf9b0a622e59f06"
+  },
+  "v1/core/sched/output.py": {
+    "before": "972e0bc8e7af1f4262ac73f660f6b8f798ba780f86c031a9c8a7f10cbfaad3a8",
+    "after": "5d54195de4de69ca7c38b70c6850a1d30df4f9a57b2bf8e68d2370d0cc8a0db6"
+  },
+  "v1/worker/gpu/model_runner.py": {
+    "before": "9c67717a84cf3cf78c4305d744ca2669c1a63aa1f3929d34e9f09624c77f07b8",
+    "after": "c55e17516895686ea4b5ed94f1e30c6217e6d6c4bbe3488dc9f64b515163fa70"
+  },
+  "v1/worker/gpu_worker.py": {
+    "before": "b1e70ee847a27e1694347a9f848b15f87623622e268442445a2e6436c659ff11",
+    "after": "cb6e847eb3178a20305311d404fe704b542499e4eca90c26fe03d44201826b5d"
+  },
+  "v1/core/kv_cache_utils.py": {
+    "before": "d359221ef91a94f7e570220f083979297c297227c1ad1b8ccdbec76cc24565b7",
+    "after": "7c413fe0c553238067980393693fd08744a0fe6e77c2e8ca0b23f7512e4f97ea"
+  },
+  "entrypoints/serve/__init__.py": {
+    "before": "bac4ffa8440759d9a244acc25bf28ce6700d7106a2b35eff90c35e70a7519f52",
+    "after": "7d9b350f4dbddd998b58bdb22c4ddd54a525ebe1eda192482fe3d4f8b0501f17"
+  },
+  "v1/worker/gpu/spec_decode/autoregressive/speculator.py": {
+    "before": "15ea67866ded0d5dbb45ee9c2db6637200e23193759c8157b0f5efc26ec65f6d",
+    "after": "fb0fc18df67279485727f0975bdd55caf4b3ab4c09352d702c03ffc8ad38869a"
+  }
+}

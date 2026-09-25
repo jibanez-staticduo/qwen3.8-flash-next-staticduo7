@@ -1,0 +1,109 @@
+{
+  "commit": "7f1a5398e9610d96c473931a26c0e12bbe0d0423",
+  "sha256": {
+    "v1/core/sched/output.py": "972e0bc8e7af1f4262ac73f660f6b8f798ba780f86c031a9c8a7f10cbfaad3a8",
+    "v1/worker/gpu/model_runner.py": "9c67717a84cf3cf78c4305d744ca2669c1a63aa1f3929d34e9f09624c77f07b8",
+    "v1/worker/gpu_worker.py": "b1e70ee847a27e1694347a9f848b15f87623622e268442445a2e6436c659ff11",
+    "v1/core/kv_cache_utils.py": "d359221ef91a94f7e570220f083979297c297227c1ad1b8ccdbec76cc24565b7",
+    "entrypoints/serve/__init__.py": "bac4ffa8440759d9a244acc25bf28ce6700d7106a2b35eff90c35e70a7519f52",
+    "v1/worker/gpu/spec_decode/autoregressive/speculator.py": "15ea67866ded0d5dbb45ee9c2db6637200e23193759c8157b0f5efc26ec65f6d"
+  },
+  "replacements": [
+    [
+      "v1/core/sched/output.py",
+      "    # Only used for v2 model runner.\n    prefill_token_ids: list[int] | None = None\n",
+      "    # Only used for v2 model runner.\n    prefill_token_ids: list[int] | None = None\n    # rank1-refusal: fuerza de ablacion codificada como cache_salt=\"refusal:<x>\".\n    # None = sin sello -> usa el lambda global del servidor.\n    refusal_lambda: float | None = None\n",
+      1
+    ],
+    [
+      "v1/core/sched/output.py",
+      "            prompt_is_token_ids=request.prompt_is_token_ids,\n            prefill_token_ids=prefill_token_ids,\n            replay_start=request.replay_start,\n        )\n",
+      "            prompt_is_token_ids=request.prompt_is_token_ids,\n            prefill_token_ids=prefill_token_ids,\n            replay_start=request.replay_start,\n            refusal_lambda=parse_refusal_lambda(request.cache_salt),\n        )\n",
+      1
+    ],
+    [
+      "v1/core/sched/output.py",
+      "from vllm.config.ec_manager_config import EncoderCacheManagerMetadata\n",
+      "from vllm.config.ec_manager_config import EncoderCacheManagerMetadata\nfrom vllm.refusal_projection import parse_request_lambda as parse_refusal_lambda\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/model_runner.py",
+      "from vllm.v1.worker.gpu.lora_utils import (\n",
+      "from vllm import refusal_projection\nfrom vllm.v1.worker.gpu.refusal_utils import RefusalState\nfrom vllm.v1.worker.gpu.lora_utils import (\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/model_runner.py",
+      "        self.lora_state = LoraState(max_num_reqs=self.max_num_reqs)\n",
+      "        self.lora_state = LoraState(max_num_reqs=self.max_num_reqs)\n        # rank1-refusal: espejo del LoraState. Un slot por peticion.\n        self.refusal_state = RefusalState(\n            max_num_reqs=self.max_num_reqs,\n            max_num_tokens=self.max_num_tokens,\n            device=self.device,\n        )\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/model_runner.py",
+      "        self.lora_state.remove_request(req_id)\n        return True\n",
+      "        self.lora_state.remove_request(req_id)\n        self.refusal_state.remove_request(req_idx)\n        return True\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/model_runner.py",
+      "            self.lora_state.add_request(req_id, req_index, new_req_data.lora_request)\n",
+      "            self.lora_state.add_request(req_id, req_index, new_req_data.lora_request)\n            self.refusal_state.add_request(req_index, new_req_data.refusal_lambda)\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/model_runner.py",
+      "                self._set_active_loras(*lora_inputs)\n        else:\n",
+      "                self._set_active_loras(*lora_inputs)\n            if refusal_projection.is_enabled():\n                _lam = refusal_projection.get_lambda()\n                self.refusal_state.fill_target(\n                    input_batch.idx_mapping_np,\n                    input_batch.num_scheduled_tokens,\n                    _lam,\n                    num_tokens=getattr(input_batch, \"num_tokens\", None),\n                )\n        else:\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/model_runner.py",
+      "            if skip_attn_for_dummy_run:\n",
+      "            if refusal_projection.is_enabled():\n                self.refusal_state.fill_neutral(refusal_projection.get_lambda())\n            if skip_attn_for_dummy_run:\n",
+      1
+    ],
+    [
+      "v1/worker/gpu_worker.py",
+      "    def sleep(self, level: int = 1) -> None:\n",
+      "    def set_refusal_lambda(self, value: float) -> float:\n        from vllm.refusal_projection import set_lambda\n\n        applied = set_lambda(float(value))\n        logger.info(\"rank1-refusal: lambda -> %s (rank %s)\", applied, self.rank)\n        return applied\n\n    def get_refusal_lambda(self) -> float:\n        from vllm.refusal_projection import get_lambda\n\n        return get_lambda()\n\n    def sleep(self, level: int = 1) -> None:\n",
+      1
+    ],
+    [
+      "v1/core/kv_cache_utils.py",
+      "from vllm.logger import init_logger\n",
+      "from vllm.logger import init_logger\nfrom vllm.refusal_projection import lambda_hash_key as refusal_lambda_hash_key\n",
+      1
+    ],
+    [
+      "v1/core/kv_cache_utils.py",
+      "    prompt_embeds_keys = _gen_prompt_embeds_extra_hash_keys(\n        request, start_token_idx, end_token_idx\n    )\n\n    extra_keys: list[Any] = (\n        lora_extra_keys + mm_extra_keys + cache_salt_keys + prompt_embeds_keys\n    )\n",
+      "    prompt_embeds_keys = _gen_prompt_embeds_extra_hash_keys(\n        request, start_token_idx, end_token_idx\n    )\n    # rank1-refusal: el lambda entra en la clave de bloque. Sin esto, dos\n    # peticiones con el mismo prompt y distinto lambda REUTILIZAN el KV del otro:\n    # la segunda recibe el resultado con el lambda equivocado y sin senal.\n    # Solo en el primer bloque: el lambda es por peticion, no por bloque.\n    _lam_key = refusal_lambda_hash_key()\n    refusal_keys: list[str] = (\n        [f\"refusal_lambda={_lam_key}\"]\n        if start_token_idx == 0 and _lam_key is not None\n        else []\n    )\n\n    extra_keys: list[Any] = (\n        lora_extra_keys\n        + mm_extra_keys\n        + cache_salt_keys\n        + prompt_embeds_keys\n        + refusal_keys\n    )\n",
+      1
+    ],
+    [
+      "entrypoints/serve/__init__.py",
+      "    attach_tokenize_router(app)\n",
+      "    attach_tokenize_router(app)\n\n    from vllm.entrypoints.serve.refusal.api_router import (\n        attach_router as attach_refusal_router,\n    )\n\n    attach_refusal_router(app)\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/spec_decode/autoregressive/speculator.py",
+      "import torch\n",
+      "import torch\nfrom vllm import refusal_projection\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/spec_decode/autoregressive/speculator.py",
+      "        self.on_prefill_begin(num_reqs)\n",
+      "        if refusal_projection.is_enabled():\n            if self.pcp_manager is not None:\n                raise RuntimeError(\"refusal per-request draft does not support PCP\")\n            if dummy_run:\n                refusal_projection.fill_neutral(refusal_projection.get_lambda())\n            else:\n                # Step zero retains target row ranges, including rejected padding.\n                refusal_projection.fill_target(\n                    input_batch.idx_mapping_np,\n                    input_batch.num_scheduled_tokens,\n                    refusal_projection.get_lambda(),\n                    num_tokens=input_batch.num_tokens,\n                )\n        self.on_prefill_begin(num_reqs)\n",
+      1
+    ],
+    [
+      "v1/worker/gpu/spec_decode/autoregressive/speculator.py",
+      "        self.on_multi_step_decode_begin(num_reqs)\n",
+      "        if refusal_projection.is_enabled():\n            if dummy_run:\n                refusal_projection.fill_neutral(refusal_projection.get_lambda())\n            else:\n                # Steps one onward use one row per request in the same order.\n                # Fill outside both single-step and fused FULL graph replays.\n                refusal_projection.fill_target(\n                    input_batch.idx_mapping_np,\n                    [1] * num_reqs,\n                    refusal_projection.get_lambda(),\n                    num_tokens=num_reqs,\n                )\n        self.on_multi_step_decode_begin(num_reqs)\n",
+      1
+    ]
+  ]
+}

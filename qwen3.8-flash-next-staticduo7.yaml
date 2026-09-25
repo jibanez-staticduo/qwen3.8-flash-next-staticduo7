@@ -1,0 +1,158 @@
+builder: docker-pull
+cluster_only: false
+command: |
+  # Best-effort page-cache eviction from Mia main. It is harmless when the
+  # checkpoint path is not visible inside the container.
+  python3 - <<'PY'
+  import ctypes
+  import os
+  import pathlib
+  libc = ctypes.CDLL(None)
+  dontneed = getattr(os, "POSIX_FADV_DONTNEED", 4)
+  revision = "7b719225242aacd3dbd3f9407468c2ee9a9d2594"
+  roots = [pathlib.Path("/root/.cache/huggingface/hub"),
+           pathlib.Path("/home/vllm/.cache/huggingface/hub"),
+           pathlib.Path("/home/.cache/huggingface/hub")]
+  for root in roots:
+      snap = root / "models--RadixArk--Qwen3.8-Flash-Next-NVFP4" / "snapshots" / revision
+      if not snap.exists():
+          continue
+      for path in snap.rglob("*"):
+          if path.is_file():
+              try:
+                  fd = os.open(path, os.O_RDONLY)
+                  libc.posix_fadvise(fd, 0, 0, dontneed)
+                  os.close(fd)
+              except OSError:
+                  pass
+  PY
+  # SYS_NICE may be unavailable inside the container. Preserve the same
+  # serving command in either case.
+  if nice -n -19 true 2>/dev/null; then
+    set -- nice -n -19
+  else
+    set --
+  fi
+  exec "$@" taskset -c 5-9,15-19 vllm serve {model} \
+    --revision {revision} \
+    --served-model-name {served_model_name} \
+    --host {host} \
+    --port {port} \
+    --tensor-parallel-size {tensor_parallel} \
+    --enable-expert-parallel \
+    --all2all-backend allgather_reducescatter \
+    --trust-remote-code \
+    --gpu-memory-utilization {gpu_memory_utilization} \
+    --kv-cache-memory-bytes {kv_cache_memory_bytes} \
+    --max-model-len {max_model_len} \
+    --max-num-seqs {max_num_seqs} \
+    --max-num-batched-tokens {max_num_batched_tokens} \
+    --long-prefill-token-threshold 1024 \
+    --kv-cache-dtype {kv_cache_dtype} \
+    --mamba-ssm-cache-dtype {mamba_ssm_cache_dtype} \
+    --enable-prefix-caching \
+    --compilation-config '{{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,3,4]}}' \
+    --additional-config '{{"gdn_prefill_backend":"triton"}}' \
+    --enable-flashinfer-autotune \
+    --speculative-config '{{"method":"mtp","num_speculative_tokens":{num_speculative_tokens},"index_share_for_mtp_iteration":true,"disable_eagle_block_drop":true,"use_local_argmax_reduction":true}}' \
+    --enable-prompt-tokens-details \
+    --kv-cache-metrics \
+    --kv-cache-metrics-sample 1.0 \
+    --enable-auto-tool-choice \
+    --tool-call-parser qwen3_coder \
+    --reasoning-parser qwen3
+container: vllm/vllm-openai@sha256:13ea3b228a97a12482302341942fd1e5694395ad2c46f940de15fa8f4b4a7a1d
+defaults:
+  gpu_memory_utilization: 0.8
+  host: 0.0.0.0
+  kv_cache_dtype: fp8_e4m3
+  kv_cache_memory_bytes: 30064771072
+  mamba_ssm_cache_dtype: bfloat16
+  max_model_len: 262144
+  max_num_batched_tokens: 8192
+  max_num_seqs: 12
+  num_speculative_tokens: 4
+  port: 8000
+  revision: 7b719225242aacd3dbd3f9407468c2ee9a9d2594
+  served_model_name: qwen3.8-flash-next
+  tensor_parallel: 2
+description: >-
+  Staticduo7 nightly port with eight changes tracked from MiaAI-Lab.
+  Keeps RadixArk, refusal and FlashInfer.
+env:
+  VLLM_SERVER_DEV_MODE: '0'
+  MTP_INDEX_SHARE: '1'
+  MTP_ADAPTIVE: '1'
+  QWEN_MTP_ADAPTIVE: '1'
+  MAMBA_SSM_CACHE_DTYPE: bfloat16
+  MIA_EVICT_PAGE_CACHE: '1'
+  VLLM_MTP_DRAFT_VOCAB: /opt/mia-staticduo7/draft_vocab_en_code_47k.txt
+  CPUSET_CPUS: 5-9,15-19
+  VLLM_USE_DEEP_GEMM: '0'
+  NCCL_NVLS_ENABLE: '0'
+  PYTORCH_ALLOC_CONF: expandable_segments:True
+  VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: '64'
+  CUTE_DSL_ARCH: sm_121a
+  FLASHINFER_CUDA_ARCH_LIST: 12.1a
+  FLASHINFER_DISABLE_VERSION_CHECK: '1'
+  GLOO_SOCKET_IFNAME: enp1s0f1np1
+  NCCL_CROSS_NIC: '1'
+  NCCL_IB_DISABLE: '0'
+  NCCL_IB_GID_INDEX: '-1'
+  NCCL_IB_ADDR_FAMILY: AF_INET
+  NCCL_IB_ROCE_VERSION_NUM: '2'
+  NCCL_IB_HCA: rocep1s0f1,roceP2p1s0f1
+  NCCL_SOCKET_IFNAME: enp1s0f1np1
+  TORCH_CUDA_ARCH_LIST: 12.1f
+  VLLM_HTTP_TIMEOUT_KEEP_ALIVE: '600'
+  VLLM_PLE_CPU_OFFLOAD: '0'
+  VLLM_USAGE_SOURCE: production-docker-image
+  VLLM_REFUSAL_DIRECTION: /opt/refusal/refusal_direction_flashnext.npy
+  VLLM_REFUSAL_LAMBDA: '0'
+  VLLM_USE_V2_MODEL_RUNNER: '1'
+executor_config:
+  cap_add:
+  - SYS_PTRACE
+  - SYS_NICE
+  entrypoint: ''
+max_nodes: 2
+metadata:
+  all2all_backend: allgather_reducescatter
+  comparison_baseline: qwen3.8-flash-next-staticduo5
+  description: vLLM 7f1a5398 nightly port of eight experimental improvements
+  experimental_max_num_batched_tokens: '8192'
+  ab_test: nightly_7f1a5398_mia_eight_improvements
+  expert_parallel: 'true'
+  flashinfer_autotune: 'true'
+  kv_cache_dtype: fp8_e4m3
+  model_dtype: nvfp4
+  model_params: '180000000000'
+  multimodal: 'true'
+  model_unchanged: 'true'
+  mtp_index_share: 'true'
+  mtp_adaptive: 'true'
+  mtp_disable_block_drop: 'true'
+  mtp_reduced_vocab: bundled_in_qwen38-staticduo7-7f1a5398
+  page_cache_eviction: best_effort_in_command
+  cpu_priority: taskset_active_nice_attempted
+  irq_affinity: host_side_not_expressed_by_yaml
+  observability: prompt_tokens_details_and_kv_metrics
+  determinism: not_enabled_due_to_performance_cost
+  source_mia_main: https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks
+  source_mia_pr51: https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/51
+  source_mia_pr53: https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/53
+  source_mia_pr65: https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/65
+  source_mia_pr66: https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/66
+  source_ursuciprian: https://github.com/ursuciprian/qwen3.8-flash-next-dgx-spark-tp-2
+  qsa_patch_rfc: https://github.com/vllm-project/vllm/issues/54426
+  source_audit_sha256: e0487ade2cb823f4fd65b8dd27a04d2242c1f6e410a5d39853337f020f708436
+  validation: gpu_tp2_text_vision_medium_benchmark_completed
+  upstream_commit: 7f1a5398e9610d96c473931a26c0e12bbe0d0423
+  vllm_commit: 7f1a5398e9610d96c473931a26c0e12bbe0d0423
+min_nodes: 2
+model: RadixArk/Qwen3.8-Flash-Next-NVFP4
+mods:
+- qwen38-staticduo7-7f1a5398
+name: qwen3.8-flash-next-staticduo7
+recipe_version: '1'
+runtime: vllm-distributed

@@ -1,0 +1,84 @@
+{
+  "commit": "7f1a5398e9610d96c473931a26c0e12bbe0d0423",
+  "sha256": {
+    "models/qwen4_exp/nvidia/model.py": "bdc0ea930dadc02328c2bee0b4c9cad048b989612cc76906829728668dcde138",
+    "models/qwen4_exp/nvidia/mtp.py": "35dc7e4b4cf124ce79a7bfc65a5f198c9edc622f1692bf6b24c91486112b7d99",
+    "models/qwen4_exp/nvidia/ple_layer.py": "704849dca1a5abaca978dd366e23f27ed327f2ee517a6589f1dfb03602782967",
+    "models/qwen4_exp/nvidia/ops/ple.py": "68f3499f00c67742a8c3fcece071626d8d82e8a6e1c04e241922df61539d8e9b",
+    "model_executor/models/registry.py": "64c80d8c6659833a9abf836180f2b7549903db2a664e22bc38e38c258a6f572e"
+  },
+  "replacements": [
+    [
+      "models/qwen4_exp/nvidia/model.py",
+      "from vllm.distributed import get_pp_group\n",
+      "from vllm.distributed import get_pp_group\nfrom vllm import refusal_projection as _refusal\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/model.py",
+      "        self.embed_tokens = VocabParallelEmbedding(self.vocab_size, config.hidden_size)\n",
+      "        self.embed_tokens = VocabParallelEmbedding(self.vocab_size, config.hidden_size)\n        # rank1-refusal: el estado (direccion + tensor lambda + buffer por token)\n        # tiene que existir antes de que se capturen los CUDA graphs. Perezoso no\n        # vale: si la primera pasada fuese la captura, el grafo se quedaria con la\n        # rama \"desactivada\" horneada y el dial no moveria nada en silencio.\n        _refusal.init_from_env(int(config.hidden_size))\n        # rank1-refusal: idem que en la capa -- el forward de embed_tokens\n        # nombra su sitio con este prefijo y `prefix` no vive en ese ambito.\n        self._rank1_prefix = prefix\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/model.py",
+      "        self.layer_idx = extract_layer_index(prefix)\n",
+      "        self.layer_idx = extract_layer_index(prefix)\n        # rank1-refusal: el forward nombra sus sitios con este prefijo.\n        self._rank1_prefix = prefix\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/model.py",
+      "                if input_ids is None:\n                    raise ValueError(\"input_ids or inputs_embeds is required\")\n                hidden_states = self.embed_input_ids(input_ids)\n            hidden_states = hidden_states.repeat(1, self.config.hc_count)\n",
+      "                if input_ids is None:\n                    raise ValueError(\"input_ids or inputs_embeds is required\")\n                hidden_states = self.embed_input_ids(input_ids)\n                # rank1-refusal: `embed_tokens` es writer editado (project_in: a\n                # cada FILA se le resta su componente) y la salida de un token ES\n                # su fila. Va ANTES del repeat: proyectar y luego replicar a 4\n                # streams sale igual que proyectar 4 veces, y cuesta una vez.\n                hidden_states = _refusal.project(\n                    hidden_states, key=f\"{self._rank1_prefix}.embed_tokens\"\n                )\n            hidden_states = hidden_states.repeat(1, self.config.hc_count)\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/model.py",
+      "        mlp_hc = self.mlp_hyper_connection\n        hidden_states, block_input, injection = mlp_hc.combine_and_mix(\n            hidden_states, attn_out, injection\n        )\n        mlp_out = self.mlp(block_input)\n        return hidden_states, mlp_out, injection\n",
+      "        # rank1-refusal: proyectar la salida de bloque ANTES de inyectarla\n        # equivale a ortogonalizar TODOS los writers que la suman, porque la\n        # proyeccion es lineal. Aqui eso cubre o_proj / linear_attn.out_proj de\n        # una sola vez.\n        attn_out = _refusal.project(\n            attn_out, key=f\"{self._rank1_prefix}.attn_out.{self.layer_type}\"\n        )\n\n        mlp_hc = self.mlp_hyper_connection\n        hidden_states, block_input, injection = mlp_hc.combine_and_mix(\n            hidden_states, attn_out, injection\n        )\n        mlp_out = self.mlp(block_input)\n        # rank1-refusal: idem, y aqui cubre de una vez los 512 expertos\n        # fusionados + el shared expert de la capa.\n        mlp_out = _refusal.project(\n            mlp_out, key=f\"{self._rank1_prefix}.mlp_out.{type(self.mlp).__name__}\"\n        )\n        return hidden_states, mlp_out, injection\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/model.py",
+      "        self.start_layer, self.end_layer, self.layers = make_layers(\n            config.num_hidden_layers, get_layer, prefix=f\"{prefix}.layers\"\n        )\n        self.is_fused_shared_expert_enabled = is_model_fused_shared_expert_compatible(\n            self.layers,\n            Qwen4ExpSparseMoeBlock,\n            \"mlp\",\n        )\n        intermediate_size = config.hidden_size * config.hc_count\n",
+      "        self.start_layer, self.end_layer, self.layers = make_layers(\n            config.num_hidden_layers, get_layer, prefix=f\"{prefix}.layers\"\n        )\n        if _refusal.is_enabled() and (\n            self.start_layer == 0 and self.end_layer == config.num_hidden_layers\n        ):\n            # FAIL-CLOSED. Cada capa registra 2 sitios (attn_out + mlp_out); los\n            # de embed/ple/drafter se suman aparte. Si vLL cambia la topologia y\n            # un sitio deja de ejecutarse, esto muere en el arranque en vez de\n            # servir un modelo medio ablado -- que es exactamente el caso que no\n            # se detecta mirando respuestas.\n            # Se comprueba por PREFIJO, no por numero global: el drafter MTP vive\n            # en el mismo proceso y registraria los suyos aqui.\n            _ple = len({abs(i) for i in getattr(config, \"ple_layer_ids\", [])\n                        if abs(i) <= config.num_hidden_layers})\n\n            # 03-09-2026: esto se llamaba AQUI MISMO, en la construccion, y\n            # tumbo el residente con 16 reinicios. Los sitios se registran\n            # dentro de project() -- `_consumed.add(key)` -- y project() corre\n            # en el forward de cada capa, no al construir. En __init__ el\n            # contador esta vacio por definicion: 0 de 96 SIEMPRE, y el\n            # fail-closed mataba un servidor que podia estar sano. No era\n            # cuestion de moverlo unas lineas mas abajo: en construccion no ha\n            # corrido ningun forward, da igual donde se ponga dentro de __init__.\n            #\n            # Un forward_hook del modelo corre cuando el forward ha terminado, o\n            # sea cuando las capas ya han llamado a project() una vez cada una.\n            # One-shot con flag: a partir del segundo paso no hace nada.\n            def _rank1_verify(_mod, _inp, _out, _n=config.num_hidden_layers,\n                              _prefix=prefix, _ple=_ple):\n                if getattr(_mod, \"_rank1_verified\", False):\n                    return\n                _mod._rank1_verified = True\n                # Por PREFIJO y por sufijo: el drafter MTP vive en el mismo\n                # proceso y sus sitios se sumarian a un conteo global.\n                # 03-09-2026: estas tres cuentas estaban mal y habrian matado\n                # el arranque igual que el bug anterior.\n                #   - `2 * _n` venia de \"cada capa registra 2 sitios\". Cierto en\n                #     TOTAL, pero cada verify filtra por sufijo: attn_out son _n\n                #     (uno por capa), no 2*_n. Simulado con la config real\n                #     (48 capas): esperaba 96 y hay 48.\n                #   - el ple lo registra la CAPA, con su propio prefijo, asi que\n                #     la clave es \"<modelo>.layers.<i>.ple\". Buscarla bajo el\n                #     prefijo \"<modelo>.ple\" da 0 de 1. Va por el mismo prefijo\n                #     que el resto y se distingue por el sufijo.\n                _refusal.verify_consumed(\n                    f\"{_prefix}.layers\", _n, suffix=\"attn_out\"\n                )\n                _refusal.verify_consumed(\n                    f\"{_prefix}.layers\", _n, suffix=\"mlp_out\"\n                )\n                _refusal.verify_consumed(\n                    f\"{_prefix}.layers\", _ple, suffix=\"ple\"\n                )\n\n            self.register_forward_hook(_rank1_verify)\n        self.is_fused_shared_expert_enabled = is_model_fused_shared_expert_compatible(\n            self.layers,\n            Qwen4ExpSparseMoeBlock,\n            \"mlp\",\n        )\n        intermediate_size = config.hidden_size * config.hc_count\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/mtp.py",
+      "from vllm.distributed import get_pp_group\n",
+      "from vllm.distributed import get_pp_group\nfrom vllm import refusal_projection as _refusal\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/mtp.py",
+      "    def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:\n        return self.embed_tokens(input_ids)\n",
+      "    def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:\n        # rank1-refusal: el drafter tiene su propia embedding y NO pasa por el\n        # sitio T2 del target.\n        return _refusal.project(\n            self.embed_tokens(input_ids), key=\"mtp.embed_tokens\"\n        )\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/mtp.py",
+      "            hidden_states = hidden_states.flatten(-2)\n            prev_block_output = inputs_embeds\n",
+      "            hidden_states = _refusal.project_hc(\n                hidden_states.flatten(-2), hc_count,\n                key=\"mtp.fc_hidden\",\n            )\n            prev_block_output = _refusal.project(\n                inputs_embeds, key=\"mtp.fc_embedding\",\n            )\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/mtp.py",
+      "        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(\n            [\"hidden_states\"], self.hidden_size * self.hc_count\n        )\n",
+      "        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(\n            [\"hidden_states\"], self.hidden_size * self.hc_count\n        )\n        def _rank1_verify_mtp(_mod, _inp, _out):\n            if not _refusal.is_enabled() or not get_pp_group().is_first_rank:\n                return\n            if getattr(_mod, \"_rank1_writers_verified\", False):\n                return\n            # Separate keys prevent one writer from hiding a missing other one.\n            _refusal.verify_consumed(\"mtp.fc_hidden\", 1)\n            _refusal.verify_consumed(\"mtp.fc_embedding\", 1)\n            _mod._rank1_writers_verified = True\n\n        self.register_forward_hook(_rank1_verify_mtp)\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/ple_layer.py",
+      "from vllm.forward_context import get_forward_context\n",
+      "from vllm.forward_context import get_forward_context\nfrom vllm import refusal_projection as _refusal\n",
+      1
+    ],
+    [
+      "models/qwen4_exp/nvidia/ple_layer.py",
+      "        self._short_conv(conv_input, gated_output, hidden_states)\n        return gated_output\n",
+      "        if _refusal.is_enabled():\n            # The nightly kernel includes the outer residual. Project only the\n            # PLE writer, without recovering its delta by a lossy subtraction.\n            self._short_conv(conv_input, gated_output, torch.zeros_like(hidden_states))\n            return hidden_states + _refusal.project_hc(\n                gated_output, self.hc_count, key=self.prefix\n            )\n        self._short_conv(conv_input, gated_output, hidden_states)\n        return gated_output\n",
+      1
+    ]
+  ]
+}

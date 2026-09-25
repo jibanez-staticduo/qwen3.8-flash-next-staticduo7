@@ -1,0 +1,10 @@
+framework: llama-benchy
+metadata:
+  description: Three runs at depths 0 and 65535 with concurrency 1, 4 and 8
+args:
+  depth: [0, 65535]
+  concurrency: [1, 4, 8]
+  pp: [2048]
+  tg: [128]
+  runs: 3
+  prefix_caching: true

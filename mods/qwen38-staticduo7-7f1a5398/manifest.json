@@ -1,0 +1,74 @@
+{
+  "files": {
+    "entrypoints/serve/__init__.py": {
+      "base_sha256": "bac4ffa8440759d9a244acc25bf28ce6700d7106a2b35eff90c35e70a7519f52",
+      "overlay_sha256": "7d9b350f4dbddd998b58bdb22c4ddd54a525ebe1eda192482fe3d4f8b0501f17"
+    },
+    "entrypoints/serve/refusal/__init__.py": {
+      "base_sha256": null,
+      "overlay_sha256": "6c6ec57de9f82ef42d82760f144a4571cb16b3cd6de33aaa7aa9fd65e8ab1fa1"
+    },
+    "entrypoints/serve/refusal/api_router.py": {
+      "base_sha256": null,
+      "overlay_sha256": "5a89ee07635a4f7752b11f161d9f54a2d88e4d3f29d1953de076f7b1766e17c8"
+    },
+    "models/qwen4_exp/nvidia/model.py": {
+      "base_sha256": "bdc0ea930dadc02328c2bee0b4c9cad048b989612cc76906829728668dcde138",
+      "overlay_sha256": "b36c9175d539abbee4da5c8827ec888179ed6ee8dbb43b99fdc42c252fc3a439"
+    },
+    "models/qwen4_exp/nvidia/mtp.py": {
+      "base_sha256": "35dc7e4b4cf124ce79a7bfc65a5f198c9edc622f1692bf6b24c91486112b7d99",
+      "overlay_sha256": "5efa8cfb7380a0625fa9123398fa385eed30419d145fed55c8f7f24a9091eb7c"
+    },
+    "models/qwen4_exp/nvidia/ple_layer.py": {
+      "base_sha256": "704849dca1a5abaca978dd366e23f27ed327f2ee517a6589f1dfb03602782967",
+      "overlay_sha256": "0fcc9b61a2340f59a39ac41f31da79b7c00f1593fa05a2eb8bf9b0a622e59f06"
+    },
+    "refusal_projection.py": {
+      "base_sha256": null,
+      "overlay_sha256": "b5bf986cce3b914b6391e1ea5d4b5d117543b4f056b5dd862adad76e5ac8c6ae"
+    },
+    "v1/core/kv_cache_utils.py": {
+      "base_sha256": "d359221ef91a94f7e570220f083979297c297227c1ad1b8ccdbec76cc24565b7",
+      "overlay_sha256": "7c413fe0c553238067980393693fd08744a0fe6e77c2e8ca0b23f7512e4f97ea"
+    },
+    "v1/core/sched/output.py": {
+      "base_sha256": "972e0bc8e7af1f4262ac73f660f6b8f798ba780f86c031a9c8a7f10cbfaad3a8",
+      "overlay_sha256": "5d54195de4de69ca7c38b70c6850a1d30df4f9a57b2bf8e68d2370d0cc8a0db6"
+    },
+    "v1/core/sched/qwen_mtp_adaptive.py": {
+      "base_sha256": null,
+      "overlay_sha256": "15ebc5318a5495c9f38c39e44e7813550b7f9edf7999d11bebd9742ae35f4cc3"
+    },
+    "v1/core/sched/scheduler.py": {
+      "base_sha256": "95267641af27c4509a36c68e5a182673fe44d98f4f4b4fe558dfd3d5cc90fb74",
+      "overlay_sha256": "15a576f4a340d8ae9bb603a145f2bbf5a823fc5f899b7aeaa747511de682aa6b"
+    },
+    "v1/worker/gpu/cudagraph_utils.py": {
+      "base_sha256": "0154ccf85e58d5e8c0308018fd843e379e43860f429fc931d4551f93c406771d",
+      "overlay_sha256": "fd9420665ee7398481415844a6a2a362f14d6aaa7a567ac5daa54af9e639dcae"
+    },
+    "v1/worker/gpu/model_runner.py": {
+      "base_sha256": "9c67717a84cf3cf78c4305d744ca2669c1a63aa1f3929d34e9f09624c77f07b8",
+      "overlay_sha256": "d4705cb006e2dd8a0d794a85a7bfcc388688fa4a8610ee7a1761c71e729ac642"
+    },
+    "v1/worker/gpu/refusal_utils.py": {
+      "base_sha256": null,
+      "overlay_sha256": "9fbc4234848ccc429ecc65ce0a1386094e35748a95ba1de670c25bfbd46079b1"
+    },
+    "v1/worker/gpu/spec_decode/autoregressive/speculator.py": {
+      "base_sha256": "15ea67866ded0d5dbb45ee9c2db6637200e23193759c8157b0f5efc26ec65f6d",
+      "overlay_sha256": "57726969aefb092f55f5736025b87fa0aadd23fd21e050d41139244f5c5d4463"
+    },
+    "v1/worker/gpu/spec_decode/mtp/speculator.py": {
+      "base_sha256": "926d6c9ffdb368c971647911a60493820d056ce236fcae9d94a42fa2e006255d",
+      "overlay_sha256": "e7a99ce265dff3e40d5d48f1acd36816604ab9c1fc0e513a13ce16c287f59d94"
+    },
+    "v1/worker/gpu_worker.py": {
+      "base_sha256": "b1e70ee847a27e1694347a9f848b15f87623622e268442445a2e6436c659ff11",
+      "overlay_sha256": "cb6e847eb3178a20305311d404fe704b542499e4eca90c26fe03d44201826b5d"
+    }
+  },
+  "image": "vllm/vllm-openai@sha256:13ea3b228a97a12482302341942fd1e5694395ad2c46f940de15fa8f4b4a7a1d",
+  "vllm_commit": "7f1a5398e9610d96c473931a26c0e12bbe0d0423"
+}
