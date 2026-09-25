@@ -25,8 +25,8 @@ The recipe contains cluster-specific CPU affinity and network interface/HCA
 names. Adapt those to another host pair before launch. The checkpoint itself
 is fetched from Hugging Face by SparkRun. The bundled refusal direction and
 47,149-ID MTP draft vocabulary are in `mods/`.
-The published YAML differs from the running YAML only in descriptive metadata
-that now records the completed TP2 validation and the limits of CPU priority.
+The current YAML includes a page-cache fix for the next launch. It has not
+been applied to the running containers or included in the measured A/B.
 
 ```bash
 sparkrun recipe validate qwen3.8-flash-next-staticduo7
@@ -52,8 +52,8 @@ informed the earlier Spark work but is not the source of these eight changes.
 | 2 | Prefix-cache observability | Prompt token details, KV-cache metrics and full sampling; Mia PR [#53](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/53) | Enabled; instrumentation only |
 | 3 | Prevent MTP last-block drop | Native `disable_eagle_block_drop=true`; Mia PR [#66](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/66) | Enabled |
 | 4 | BF16 Mamba/SSM cache | `--mamba-ssm-cache-dtype bfloat16`; Mia `main` | Enabled |
-| 5 | Evict clean checkpoint pages before launch | Best-effort `posix_fadvise(POSIX_FADV_DONTNEED)`; Mia `main` | Attempted; root-owned cache path denied on measured startup, so benefit not demonstrated |
-| 6 | CPU/IRQ priority and affinity | `taskset -c 5-9,15-19`, attempted `nice -19`; Mia PR [#51](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/51) | `taskset` active; `nice` failed (NI=0); IRQ affinity not changed; `CPUSET_CPUS` env is not a Docker cpuset |
+| 5 | Evict clean checkpoint pages before launch | `posix_fadvise(POSIX_FADV_DONTNEED)` on SparkRun's `/cache/huggingface/hub` mount; Mia `main` | Corrected for the next launch; startup effect not yet measured |
+| 6 | CPU/IRQ priority and affinity | `taskset -c 5-9,15-19`; Mia PR [#51](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/51) | `taskset` active; host-side nice, Docker cpuset and IRQ affinity remain pending |
 | 7 | Reduced MTP draft vocabulary | 47,149-ID list and exact-source overlay; Mia `main` | Loaded on both ranks; quality/per-item speed not isolated |
 | 8 | Adaptive MTP K1-K4 | Exact-source overlay and K-max=4; Mia PR [#65](https://github.com/MiaAI-Lab/Qwen3.8-Flash-Next-Dual-DGX-Sparks/pull/65) | Configured; effective K distribution not measured |
 
@@ -88,7 +88,7 @@ concurrency 1 it improved from 30.1 to 24.2 seconds. Short-context
 concurrency-4/8 averages were lower on staticduo7, although their first run
 was much slower than the following two. The A/B changes several things at
 once, so it does not establish which individual feature caused any gain or
-regression. `nice -19`, IRQ tuning, and page-cache eviction must not be
+regression. Host-side nice, cpuset, IRQ tuning, and page-cache eviction must not be
 credited with the measured improvement.
 
 Startup and text/image inference were verified on both ranks with NVIDIA
@@ -96,3 +96,6 @@ driver 580.178.04 and kernel 6.17.0-1032-nvidia. FlashInfer autotune and
 speculative-decode counters were observed. The eight features were not
 ablated independently; long-run reliability and model-quality effects need
 separate evaluation.
+On the measured startup, the old page-cache helper could not read the
+root-owned cache path, and `nice -19` did not apply (NI=0). The recipe now
+targets the mounted cache; that change awaits a new launch for validation.

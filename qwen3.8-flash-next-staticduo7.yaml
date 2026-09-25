@@ -1,39 +1,36 @@
 builder: docker-pull
 cluster_only: false
 command: |
-  # Best-effort page-cache eviction from Mia main. It is harmless when the
-  # checkpoint path is not visible inside the container.
+  # Evict clean checkpoint pages from SparkRun's Hugging Face cache mount.
   python3 - <<'PY'
   import ctypes
   import os
   import pathlib
+
   libc = ctypes.CDLL(None)
+  libc.posix_fadvise.argtypes = (ctypes.c_int, ctypes.c_int64, ctypes.c_int64, ctypes.c_int)
+  libc.posix_fadvise.restype = ctypes.c_int
   dontneed = getattr(os, "POSIX_FADV_DONTNEED", 4)
   revision = "7b719225242aacd3dbd3f9407468c2ee9a9d2594"
-  roots = [pathlib.Path("/root/.cache/huggingface/hub"),
-           pathlib.Path("/home/vllm/.cache/huggingface/hub"),
-           pathlib.Path("/home/.cache/huggingface/hub")]
-  for root in roots:
-      snap = root / "models--RadixArk--Qwen3.8-Flash-Next-NVFP4" / "snapshots" / revision
-      if not snap.exists():
-          continue
-      for path in snap.rglob("*"):
-          if path.is_file():
-              try:
-                  fd = os.open(path, os.O_RDONLY)
-                  libc.posix_fadvise(fd, 0, 0, dontneed)
-                  os.close(fd)
-              except OSError:
-                  pass
+  root = pathlib.Path(os.environ.get("HF_HUB_CACHE", "/cache/huggingface/hub"))
+  snap = root / "models--RadixArk--Qwen3.8-Flash-Next-NVFP4" / "snapshots" / revision
+  shards = list(snap.glob("*.safetensors"))
+  if not shards:
+      raise RuntimeError(f"checkpoint cache not found: {snap}")
+  total = 0
+  for path in shards:
+      fd = os.open(path, os.O_RDONLY)
+      try:
+          size = os.fstat(fd).st_size
+          error = libc.posix_fadvise(fd, 0, 0, dontneed)
+          if error:
+              raise OSError(error, os.strerror(error), str(path))
+          total += size
+      finally:
+          os.close(fd)
+  print(f"page-cache eviction advised for {len(shards)} shards ({total / 2**30:.1f} GiB)", flush=True)
   PY
-  # SYS_NICE may be unavailable inside the container. Preserve the same
-  # serving command in either case.
-  if nice -n -19 true 2>/dev/null; then
-    set -- nice -n -19
-  else
-    set --
-  fi
-  exec "$@" taskset -c 5-9,15-19 vllm serve {model} \
+  exec taskset -c 5-9,15-19 vllm serve {model} \
     --revision {revision} \
     --served-model-name {served_model_name} \
     --host {host} \
@@ -85,9 +82,7 @@ env:
   MTP_ADAPTIVE: '1'
   QWEN_MTP_ADAPTIVE: '1'
   MAMBA_SSM_CACHE_DTYPE: bfloat16
-  MIA_EVICT_PAGE_CACHE: '1'
   VLLM_MTP_DRAFT_VOCAB: /opt/mia-staticduo7/draft_vocab_en_code_47k.txt
-  CPUSET_CPUS: 5-9,15-19
   VLLM_USE_DEEP_GEMM: '0'
   NCCL_NVLS_ENABLE: '0'
   PYTORCH_ALLOC_CONF: expandable_segments:True
@@ -133,8 +128,8 @@ metadata:
   mtp_adaptive: 'true'
   mtp_disable_block_drop: 'true'
   mtp_reduced_vocab: bundled_in_qwen38-staticduo7-7f1a5398
-  page_cache_eviction: best_effort_in_command
-  cpu_priority: taskset_active_nice_attempted
+  page_cache_eviction: checked_checkpoint_advice_in_command
+  cpu_priority: taskset_only_host_tuning_required
   irq_affinity: host_side_not_expressed_by_yaml
   observability: prompt_tokens_details_and_kv_metrics
   determinism: not_enabled_due_to_performance_cost
