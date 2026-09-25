@@ -48,7 +48,7 @@ command: |
     --kv-cache-dtype {kv_cache_dtype} \
     --mamba-ssm-cache-dtype {mamba_ssm_cache_dtype} \
     --enable-prefix-caching \
-    --compilation-config '{{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY","cudagraph_capture_sizes":[1,2,3,4]}}' \
+    --compilation-config '{{"mode":0,"cudagraph_mode":"FULL_DECODE_ONLY"}}' \
     --additional-config '{{"gdn_prefill_backend":"triton"}}' \
     --enable-flashinfer-autotune \
     --speculative-config '{{"method":"mtp","num_speculative_tokens":{num_speculative_tokens},"index_share_for_mtp_iteration":true,"disable_eagle_block_drop":true,"use_local_argmax_reduction":true}}' \

@@ -11,6 +11,9 @@ The recipe pins the ARM64 image
 (vLLM `0.30.1rc1.dev48+g7f1a5398e`, CUDA 13.0). It uses TP2 + expert
 parallelism, FP8 KV, FlashInfer autotune, MTP with K up to 4, 12 maximum
 sequences, 8,192 batched tokens, and `FULL_DECODE_ONLY` CUDA graphs.
+CUDA graph capture sizes are now selected automatically by vLLM, as in
+`staticduo5`. This pending change has not been measured; the published
+benchmark JSONs were collected with explicit sizes `[1,2,3,4]`.
 
 ## Reproduce
 
